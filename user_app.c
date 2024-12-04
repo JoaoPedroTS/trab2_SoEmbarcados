@@ -1,27 +1,122 @@
 #include "user_app.h"
+#include "FreeRTOS.h"
+#include "task.h"
 #include "queue.h"
+#include <xc.h>
+#include <stdio.h>
 
-SemaphoreHandle_t s_contador;
+// Definição do pipe (queue)
+QueueHandle_t xQueuePipe;
 
-void config_user_app()
-{
-    TRISDbits.TRISD0 = 0;
-    
-    s_contador = xSemaphoreCreateCounting(5, 5);
+// Configuração dos LEDs de teste
+void led_init() {
+    TRISBbits.TRISB1 = 0; // LED Severidade - Saída
+    TRISBbits.TRISB2 = 0; // LED Moderado - Saída
+    TRISBbits.TRISB3 = 0; // LED Normal - Saída
 
+    LATBbits.LATB1 = 0; // Apaga LED Severidade
+    LATBbits.LATB2 = 0; // Apaga LED Moderado
+    LATBbits.LATB3 = 0; // Apaga LED Normal
 }
 
-void teste_sem_contador()
-{
+// Configuração do ADC
+void adc_init() {
+    AD1CON1 = 0x00E0; // Modo automático, ligado
+    AD1CON2 = 0;      // Tensão de referência interna
+    AD1CON3 = 0x1F02; // Amostragem manual, clock de conversão
+    AD1CHS = 0;       // Canal 0 (AN0)
+    AD1PCFGbits.PCFG0 = 0; // AN0 como entrada analógica
+    AD1CSSL = 0;      // Sem scan
+    AD1CON1bits.ADON = 1; // Liga o ADC
+}
+
+// Função para leitura do ADC
+uint16_t adc_read(){
+    AD1CON1bits.SAMP = 1;       // Inicia a amostragem
+    vTaskDelay(pdMS_TO_TICKS(1)); // Aguarda tempo de amostragem
+    AD1CON1bits.SAMP = 0;       // Finaliza a amostragem e inicia a conversão
+    while (!AD1CON1bits.DONE);  // Aguarda a conversão terminar
+    return ADC1BUF0;            // Retorna o valor convertido
+}
+
+// Task de leitura do sensor'
+void vTaskReadSensor(void *pvParameters) {
+    uint16_t adcValue;
+    char level;
     while (1) {
-        xSemaphoreTake(s_contador, portMAX_DELAY);
-        PORTDbits.RD0 = 1;
-        vTaskDelay(20);        
-        PORTDbits.RD0 = 0;
-        vTaskDelay(20);        
+        // Lê o valor do ADC
+        adcValue = adc_read();
+        float temperature = (adcValue * 3.3 / 1023.0) * 100.0;
+
+        // Determina o nível de criticidade
+        if (temperature > 70.0) {
+            level = 'S'; // Severidade alta
+        } else if (temperature > 40.0) {
+            level = 'M'; // Moderada
+        } else {
+            level = 'N'; // Normal
+        }
+
+        // Envia o nível para o pipe
+        xQueueSend(xQueuePipe, &level, portMAX_DELAY);
+
+        vTaskDelay(pdMS_TO_TICKS(1000)); // Executa a cada 1 segundo
     }
 }
 
+// Task de controle geral
+void vTaskControl(void *pvParameters) {
+    char receivedLevel;
+    while (1) {
+        // Recebe o nível de criticidade do pipe
+        if (xQueueReceive(xQueuePipe, &receivedLevel, portMAX_DELAY) == pdPASS) {
+            // Define o estado dos LEDs
+            switch (receivedLevel) {
+                case 'S':
+                    LATBbits.LATB0 = 1; // Liga LED Severidade
+                    LATBbits.LATB1 = 0; // Desliga LED Moderado
+                    LATBbits.LATB2 = 0; // Desliga LED Normal
+                    break;
+                case 'M':
+                    LATBbits.LATB0 = 0; // Desliga LED Severidade
+                    LATBbits.LATB1 = 1; // Liga LED Moderado
+                    LATBbits.LATB2 = 0; // Desliga LED Normal
+                    break;
+                case 'N':
+                    LATBbits.LATB0 = 0; // Desliga LED Severidade
+                    LATBbits.LATB1 = 0; // Desliga LED Moderado
+                    LATBbits.LATB2 = 1; // Liga LED Normal
+                    break;
+                default:
+                    LATBbits.LATB0 = 0; // Desliga todos em caso de erro
+                    LATBbits.LATB1 = 0;
+                    LATBbits.LATB2 = 0;
+                    break;
+            }
+        }
+    }
+}
+
+//SemaphoreHandle_t s_contador;
+//
+//void config_user_app()
+//{
+//    TRISDbits.TRISD0 = 0;
+//    
+//    s_contador = xSemaphoreCreateCounting(5, 5);
+//
+//}
+//
+//void teste_sem_contador()
+//{
+//    while (1) {
+//        xSemaphoreTake(s_contador, portMAX_DELAY);
+//        PORTDbits.RD0 = 1;
+//        vTaskDelay(20);        
+//        PORTDbits.RD0 = 0;
+//        vTaskDelay(20);        
+//    }
+//}
 
 /*
  * Problema dos canibais

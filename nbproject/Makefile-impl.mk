@@ -24,7 +24,7 @@ CLEAN_SUBPROJECTS=${CLEAN_SUBPROJECTS_${SUBPROJECTS}}
 
 
 # Project Name
-PROJECTNAME=FreeRTOS
+PROJECTNAME=trab2_SoEmbarcados
 
 # Active Configuration
 DEFAULTCONF=default

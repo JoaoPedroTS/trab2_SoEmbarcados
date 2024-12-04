@@ -6,5 +6,5 @@
 CND_BASEDIR=`pwd`
 # default configuration
 CND_ARTIFACT_DIR_default=dist/default/production
-CND_ARTIFACT_NAME_default=FreeRTOS.production.hex
-CND_ARTIFACT_PATH_default=dist/default/production/FreeRTOS.production.hex
+CND_ARTIFACT_NAME_default=trab2_SoEmbarcados.production.hex
+CND_ARTIFACT_PATH_default=dist/default/production/trab2_SoEmbarcados.production.hex
